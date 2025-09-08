@@ -9,7 +9,7 @@ data "archive_file" "lambda_zip" {
 }
 
 resource "aws_iam_role" "lambda_exec" {
-  name = "${local.function_name}-exec"
+  name               = "${local.function_name}-exec"
   assume_role_policy = jsonencode({
     Version   = "2012-10-17"
     Statement = [{
