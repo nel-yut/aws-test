@@ -1,14 +1,15 @@
 name: Terraform (lambda-test)
 
 on:
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'infra-lambda/**'
-  push:
-    branches: [ main ]
-    paths:
-      - 'infra-lambda/**'
+    pull_request:
+      branches: [ main ]
+      paths:
+        - 'infra-lambda/*.tf'
+    push:
+      branches: [ main ]
+      paths:
+        - 'infra-lambda/*.tf'
+  
 
 permissions:
   id-token: write
