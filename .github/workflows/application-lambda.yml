@@ -1,0 +1,37 @@
+name: Lambda Code Deploy
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'infra-lambda/src/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency: lambda-code-deploy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to AWS Lambda (zip)
+        uses: aws-actions/aws-lambda-deploy@v1.1.0
+        with:
+          function-name: nel-lambda-test
+          code-artifacts-dir: infra-lambda/src
+          handler: hello.handler
+          runtime: python3.12
+          publish: true
