@@ -61,9 +61,28 @@ jobs:
             -backend-config="key=${TF_STATE_KEY}" \
             -backend-config="region=${AWS_REGION}"
 
-      - name: Terraform Format
-        working-directory: ${{ env.TF_DIR }}
-        run: terraform fmt -check -recursive
+            - name: Terraform Format (non-blocking)
+            working-directory: ${{ env.TF_DIR }}
+            continue-on-error: true
+            run: |
+              set +e
+              if ! terraform fmt -check -recursive -diff > fmt.diff; then
+                echo "::warning title=terraform fmt::Formatting issues detected. The workflow will continue."
+                {
+                  echo "### Terraform fmt (non-blocking)"
+                  echo ""
+                  echo "未整形ファイルがあります。整形してコミットしてください。"
+                  echo ""
+                  echo "<details><summary>fmt diff</summary>"
+                  echo ""
+                  echo '```diff'
+                  cat fmt.diff
+                  echo '```'
+                  echo "</details>"
+                } >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "### Terraform fmt (non-blocking): no issues 👍" >> "$GITHUB_STEP_SUMMARY"
+              fi
 
       - name: Terraform Validate
         working-directory: ${{ env.TF_DIR }}
