@@ -40,7 +40,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 3
+          terraform_version: 1.13.x
 
       - name: Compute state key
         run: |
@@ -109,7 +109,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 3
+          terraform_version: 1.13.x
 
       - name: Compute state key
         run: |
