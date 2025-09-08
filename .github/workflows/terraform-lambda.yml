@@ -1,0 +1,137 @@
+name: Terraform (lambda-test)
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'infra-lambda/**'
+  push:
+    branches: [ main ]
+    paths:
+      - 'infra-lambda/**'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  AWS_REGION: ap-northeast-1
+  TF_DIR: ./infra-lambda
+  STATE_SUFFIX: infra-lambda
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency: terraform-${{ github.head_ref || github.ref }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.x
+
+      - name: Compute state key
+        run: |
+          echo "REPO_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
+          echo "TF_STATE_KEY=${GITHUB_REPOSITORY#*/}/${STATE_SUFFIX}/terraform.tfstate" >> $GITHUB_ENV
+
+      - name: Cache .terraform
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_DIR }}/.terraform
+          key: ${{ runner.os }}-tf-${{ hashFiles(format('{0}/**.tf', env.TF_DIR)) }}
+
+      - name: Terraform Init (S3 backend)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=nel-terraform" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${AWS_REGION}"
+
+      - name: Terraform Format (non-blocking)
+        working-directory: ${{ env.TF_DIR }}
+        continue-on-error: true
+        run: |
+          set +e
+              if ! terraform fmt -check -recursive -diff > fmt.diff; then
+                echo "::warning title=terraform fmt::Formatting issues detected. The workflow will continue."
+                {
+                  echo "### Terraform fmt (non-blocking)"
+                  echo ""
+                  echo "未整形ファイルがあります。整形してコミットしてください。"
+                  echo ""
+                  echo "<details><summary>fmt diff</summary>"
+                  echo ""
+                  echo '```diff'
+                  cat fmt.diff
+                  echo '```'
+                  echo "</details>"
+                } >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "### Terraform fmt (non-blocking): no issues 👍" >> "$GITHUB_STEP_SUMMARY"
+              fi
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan (log only)
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform plan -no-color
+
+  apply:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency: terraform-apply
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.13.x
+
+      - name: Compute state key
+        run: |
+          echo "REPO_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
+          echo "TF_STATE_KEY=${GITHUB_REPOSITORY#*/}/${STATE_SUFFIX}/terraform.tfstate" >> $GITHUB_ENV
+
+      - name: Cache .terraform
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_DIR }}/.terraform
+          key: ${{ runner.os }}-tf-${{ hashFiles(format('{0}/**.tf', env.TF_DIR)) }}
+
+      - name: Terraform Init (S3 backend)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=nel-terraform" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${AWS_REGION}"
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform plan -no-color -out=tfplan.bin
+          terraform apply -no-color -auto-approve tfplan.bin
