@@ -14,15 +14,15 @@ terraform {
 
   backend "s3" {
     bucket  = "nel-terraform"
-    key     = "aws-test/infra-lambda/terraform.tfstate"  # ← 修正
+    key     = "aws-test/infra-lambda/terraform.tfstate"
     region  = "ap-northeast-1"
     encrypt = true
   }
 }
 
 variable "aws_region" {
-  type        = string
   description = "AWS region"
+  type        = string
   default     = "ap-northeast-1"
 }
 
