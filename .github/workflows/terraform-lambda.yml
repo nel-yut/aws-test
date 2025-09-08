@@ -1,0 +1,148 @@
+name: Terraform (lambda-test)
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'infra-xxx/**'
+  push:
+    branches: [ main ]
+    paths:
+      - 'infra-xxx/**'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  AWS_REGION: ap-northeast-1
+  TF_DIR: ./infra-lambda
+  STATE_SUFFIX: infra-lambda
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    concurrency: terraform-${{ github.head_ref || github.ref }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 3
+
+      - name: Compute state key
+        run: |
+          echo "REPO_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
+          echo "TF_STATE_KEY=${GITHUB_REPOSITORY#*/}/${STATE_SUFFIX}/terraform.tfstate" >> $GITHUB_ENV
+
+      - name: Cache .terraform
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_DIR }}/.terraform
+          key: ${{ runner.os }}-tf-${{ hashFiles(format('{0}/**.tf', env.TF_DIR)) }}
+
+      - name: Terraform Init (S3 backend)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=nel-terraform" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${AWS_REGION}"
+
+      - name: Terraform Format
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_DIR }}
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform plan -no-color -out=tfplan.bin
+          terraform show -no-color tfplan.bin > plan.txt
+
+      - name: Plan Summary (run summary)
+        if: always()
+        run: |
+          {
+            echo "### Terraform Plan for \`$REPO_NAME\`";
+            echo "";
+            echo "**State Key:** \`$TF_STATE_KEY\`";
+            echo "";
+            echo "<details><summary>Show plan</summary>";
+            echo "";
+            echo '```';
+            cat "$TF_DIR/plan.txt";
+            echo '```';
+            echo "</details>";
+          } >> $GITHUB_STEP_SUMMARY
+
+  apply:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency: terraform-apply
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 3
+
+      - name: Compute state key
+        run: |
+          echo "REPO_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
+          echo "TF_STATE_KEY=${GITHUB_REPOSITORY#*/}/${STATE_SUFFIX}/terraform.tfstate" >> $GITHUB_ENV
+
+      - name: Cache .terraform
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.TF_DIR }}/.terraform
+          key: ${{ runner.os }}-tf-${{ hashFiles(format('{0}/**.tf', env.TF_DIR)) }}
+
+      - name: Terraform Init (S3 backend)
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=nel-terraform" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${AWS_REGION}"
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          terraform plan -no-color -out=tfplan.bin
+          terraform apply -no-color -auto-approve tfplan.bin
+
+      - name: Post-Apply Summary
+        if: always()
+        working-directory: ${{ env.TF_DIR }}
+        run: |
+          echo "### Terraform Apply completed for \`$REPO_NAME\`" >> $GITHUB_STEP_SUMMARY
+          echo "**State Key:** \`$TF_STATE_KEY\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          terraform show -no-color >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
