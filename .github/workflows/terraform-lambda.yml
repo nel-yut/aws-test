@@ -61,11 +61,11 @@ jobs:
             -backend-config="key=${TF_STATE_KEY}" \
             -backend-config="region=${AWS_REGION}"
 
-            - name: Terraform Format (non-blocking)
-            working-directory: ${{ env.TF_DIR }}
-            continue-on-error: true
-            run: |
-              set +e
+      - name: Terraform Format (non-blocking)
+        working-directory: ${{ env.TF_DIR }}
+        continue-on-error: true
+        run: |
+          set +e
               if ! terraform fmt -check -recursive -diff > fmt.diff; then
                 echo "::warning title=terraform fmt::Formatting issues detected. The workflow will continue."
                 {
@@ -88,28 +88,9 @@ jobs:
         working-directory: ${{ env.TF_DIR }}
         run: terraform validate
 
-      - name: Terraform Plan
-        id: plan
+      - name: Terraform Plan (log only)
         working-directory: ${{ env.TF_DIR }}
-        run: |
-          terraform plan -no-color -out=tfplan.bin
-          terraform show -no-color tfplan.bin > plan.txt
-
-      - name: Plan Summary (run summary)
-        if: always()
-        run: |
-          {
-            echo "### Terraform Plan for \`$REPO_NAME\`";
-            echo "";
-            echo "**State Key:** \`$TF_STATE_KEY\`";
-            echo "";
-            echo "<details><summary>Show plan</summary>";
-            echo "";
-            echo '```';
-            cat "$TF_DIR/plan.txt";
-            echo '```';
-            echo "</details>";
-          } >> $GITHUB_STEP_SUMMARY
+        run: terraform plan -no-color
 
   apply:
     if: github.event_name == 'push'
@@ -154,14 +135,3 @@ jobs:
         run: |
           terraform plan -no-color -out=tfplan.bin
           terraform apply -no-color -auto-approve tfplan.bin
-
-      - name: Post-Apply Summary
-        if: always()
-        working-directory: ${{ env.TF_DIR }}
-        run: |
-          echo "### Terraform Apply completed for \`$REPO_NAME\`" >> $GITHUB_STEP_SUMMARY
-          echo "**State Key:** \`$TF_STATE_KEY\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          terraform show -no-color >> $GITHUB_STEP_SUMMARY || true
-          echo '```' >> $GITHUB_STEP_SUMMARY
