@@ -35,3 +35,20 @@ jobs:
           handler: hello.handler
           runtime: python3.12
           publish: true
+
+      # S3からのデプロイ
+      # - name: Deploy to AWS Lambda (S3)
+      #   uses: aws-actions/aws-lambda-deploy@v1.1.0
+      #   with:
+      #     function-name: nel-lambda-test
+      #     code-artifacts-dir: infra-lambda/src
+      #     s3-bucket: lambda-deploy-bucket
+
+      # コンテナイメージからのデプロイ
+      # - name: Deploy Lambda function with container image
+      #   uses: aws-actions/aws-lambda-deploy@v1.1.0
+      #   with:
+      #     function-name: nel-lambda-image
+      #     package-type: Image # デフォルトは Zip
+      #     image-uri: image-uri:123456789012.dkr.ecr.ap-northeast-1.amazonaws.com/my-lambda-image:latest
+      #     role: arn:aws:iam::123456789012:role/lambda-role
