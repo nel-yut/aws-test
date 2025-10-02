@@ -1,0 +1,29 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo install started on `date`
+      - echo install finished on `date`
+  pre_build:
+    commands:
+      - COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $REPOSITORY_URL
+      - IMAGE_LATEST=$REPOSITORY_URL:latest
+      - IMAGE_CURRENT=$REPOSITORY_URL:$COMMIT_HASH
+  build:
+    commands:
+      - docker build -t $IMAGE_LATEST .
+      - docker tag $IMAGE_LATEST $IMAGE_CURRENT
+      - docker push $IMAGE_CURRENT
+      - docker push $IMAGE_LATEST
+  post_build:
+    commands:
+      - echo Rewriting task definitions file...
+      - envsubst < taskdef_template.json > taskdef.json
+      - echo Rewriting appspec file...
+      - envsubst < appspec_template.yaml > appspec.yaml
+artifacts: 
+  files:
+    - taskdef.json
+    - appspec.yaml
