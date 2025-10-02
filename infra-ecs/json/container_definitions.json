@@ -1,0 +1,35 @@
+[
+    {
+        "name": "${container_name}",
+        "image": "${repository_uri}:latest",
+        "essential": true,
+        "logConfiguration": {
+            "logDriver": "awslogs",
+            "options": {
+                "awslogs-region": "${aws_region}",
+                "awslogs-stream-prefix": "ecs-task",
+                "awslogs-group": "${log_group}"
+            }
+        },
+        "portMappings": [
+            {
+                "protocol": "tcp",
+                "containerPort": ${container_port}
+            }
+        ],
+        "environment": [
+            {
+                "name": "ENVIRONMENT",
+                "value": "BLUE"
+            },
+            {
+                "name": "VERSION",
+                "value": "1.0.0"
+            },
+            {
+                "name": "PORT",
+                "value": "${container_port}"
+            }
+        ]
+    }
+]
